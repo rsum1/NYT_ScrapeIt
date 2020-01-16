@@ -32,6 +32,8 @@ db.once("open", function () {
   console.log("Connected to Mongoose!")
 })
 
+var routes = require("./controller/controller.js")
+app.use("/", routes)
 //Create localhost port on port 3000
 var port = process.env.PORT || 3000
 app.listen(port, function () {
