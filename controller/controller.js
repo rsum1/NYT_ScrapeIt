@@ -29,9 +29,13 @@ router.get('/scrape', function (req, res) {
           .children('a')
           .children('h2')
           .text()
-        result.link = $(this)
+        result.summary = $(this)
           .children('a')
-          .attr("href")
+          .children('p')
+          .text()
+        result.link = `https://www.nytimes.com${$(this)
+          .children('a')
+          .attr("href")}`
 
         if (result.title !== "" && result.link !== "") {
           if (titlesArray.indexOf(result.title) == -1) {
@@ -62,51 +66,102 @@ router.get('/scrape', function (req, res) {
 })
 
 //grab articles and populate the DOM in the /articles endpoint
-// router.get('/articles', function (req, res) {
-//   Article.find().sort({ _id: -1 }).exec(function (err, doc) {
-//     if (err) {
-//       console.log(err)
-//     } else {
-//       var nextArticle = { article: doc }
-//       res.render('index', nextArticle)
-//     }
-//   })
-// })==========================
-
-router.get("/articles", function (req, res) {
-  Article.find()
-    .sort({ _id: -1 })
-    .exec(function (err, doc) {
-      if (err) {
-        console.log(err);
-      } else {
-        var artcl = { article: doc };
-        res.render("index", artcl);
-      }
-    });
-});
-
-
+router.get('/articles', function (req, res) {
+  Article.find().sort({ _id: -1 }).exec(function (err, doc) {
+    if (err) {
+      console.log(err)
+    } else {
+      var nextArticle = { article: doc }
+      res.render('index', nextArticle)
+    }
+  })
+})
 
 
 //articles JSON route, scrape articles from MongoDB into a JSON
-// router.get("/articles-json", function (req, res) {
-//   Article.find({}, function (err, doc) {
-//     if (err) {
-//       console.log(err)
-//     } else {
-//       res.json(doc)
-//     }
-//   })
-// })===================
-
-
 router.get("/articles-json", function (req, res) {
   Article.find({}, function (err, doc) {
     if (err) {
+      console.log(err)
+    } else {
+      res.json(doc)
+    }
+  })
+})
+
+//remove all articles when accessing this endpoint
+router.get("/clearAll", function (req, res) {
+  Article.deleteMany({}, function (err, doc) {
+    if (err) {
+      console.log(err)
+    } else {
+      console.log("removed all articles")
+    }
+  })
+  res.redirect("/")
+})
+
+router.get("/readArticle/:id", function (req, res) {
+  var articleId = req.params.id
+  var hbsObj = {
+    article: [],
+    body: []
+  }
+
+  Article.findOne({ _id: articleId })
+    .populate("comment")
+    .exec(function (err, doc) {
+      if (err) {
+        console.log("Error: " + err);
+      } else {
+        hbsObj.article = doc
+        var link = doc.link
+        request(link, function (error, response, html) {
+          var $ = cheerio.load(html)
+
+          $(".css-53u6y8").each(function (i, element) {
+            hbsObj.body = $(this)
+              .children("p")
+              .text()
+
+            res.render("article", hbsObj)
+            return false
+          })
+        })
+      }
+    })
+})
+
+router.post("/comment/:id", function (req, res) {
+  var user = req.body.name;
+  var content = req.body.comment;
+  var articleId = req.params.id;
+
+  var commentObj = {
+    name: user,
+    body: content
+  };
+
+  var newComment = new Comment(commentObj);
+
+  newComment.save(function (err, doc) {
+    if (err) {
       console.log(err);
     } else {
-      res.json(doc);
+      console.log(doc._id);
+      console.log(articleId);
+
+      Article.findOneAndUpdate(
+        { _id: req.params.id },
+        { $push: { comment: doc._id } },
+        { new: true }
+      ).exec(function (err, doc) {
+        if (err) {
+          console.log(err);
+        } else {
+          res.redirect("/readArticle/" + articleId);
+        }
+      });
     }
   });
 });
